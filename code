@@ -1,0 +1,166 @@
+import scapy.all as scapy
+from scapy.layers import http
+import tkinter as tk
+from tkinter import scrolledtext, filedialog, messagebox, ttk
+import threading
+
+class PacketSnifferApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Packet Sniffer")
+        self.root.geometry("700x500")  # Set a larger window size
+        self.root.configure(bg='#f5f5f5')  # Set background color
+
+        # Create and place widgets with improved layout and styling
+        self.create_widgets()
+
+        self.sniffer_thread = None
+        self.sniffing = False
+        self.packets = []
+        self.filter_ip = None
+
+    def create_widgets(self):
+        # Frame for interface settings
+        settings_frame = tk.Frame(self.root, bg='#ffffff', padx=10, pady=10)
+        settings_frame.pack(fill=tk.X, pady=(10, 0))
+
+        tk.Label(settings_frame, text="Network Interface:", bg='#ffffff', font=("Arial", 12)).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.interface_entry = ttk.Entry(settings_frame, font=("Arial", 12))
+        self.interface_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
+
+        tk.Label(settings_frame, text="Filter IP Address:", bg='#ffffff', font=("Arial", 12)).grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.search_entry = ttk.Entry(settings_frame, font=("Arial", 12))
+        self.search_entry.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
+
+        button_frame = tk.Frame(self.root, bg='#ffffff', padx=10, pady=10)
+        button_frame.pack(fill=tk.X, pady=(5, 10))
+
+        self.start_button = ttk.Button(button_frame, text="Start Sniffing", command=self.start_sniffing, style='TButton')
+        self.start_button.grid(row=0, column=0, padx=5, pady=5)
+        
+        self.stop_button = ttk.Button(button_frame, text="Stop Sniffing", command=self.stop_sniffing, style='TButton', state=tk.DISABLED)
+        self.stop_button.grid(row=0, column=1, padx=5, pady=5)
+
+        self.save_button = ttk.Button(button_frame, text="Save Packets", command=self.save_packets, style='TButton', state=tk.DISABLED)
+        self.save_button.grid(row=0, column=2, padx=5, pady=5)
+
+        # Scrolled text area for logs
+        self.log_area = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, font=("Courier New", 10), state=tk.DISABLED)
+        self.log_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Style configuration for buttons
+        style = ttk.Style()
+        style.configure('TButton', font=("Arial", 12), padding=6)
+def log(self, message):
+        self.log_area.config(state=tk.NORMAL)
+        self.log_area.insert(tk.END, message + "\n")
+        self.log_area.config(state=tk.DISABLED)
+        self.log_area.yview(tk.END)
+
+    def get_interface(self):
+        return self.interface_entry.get().strip()
+
+    def get_filter_ip(self):
+        return self.search_entry.get().strip()
+
+    def start_sniffing(self):
+        interface = self.get_interface()
+        self.filter_ip = self.get_filter_ip()
+
+        if not interface:
+            messagebox.showerror("Error", "Please specify an interface.")
+            return
+
+        # Test interface validity
+        if not self.check_interface(interface):
+            messagebox.showerror("Error", f"Interface '{interface}' not found or not accessible.")
+            return
+
+        self.sniffing = True
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+        self.save_button.config(state=tk.DISABLED)
+        self.packets = []
+
+        self.sniffer_thread = threading.Thread(target=self.sniffer, args=(interface,))
+        self.sniffer_thread.start()
+def check_interface(self, interface):
+        """ Check if the specified interface is valid and accessible """
+        try:
+            scapy.get_if_raw_hwaddr(interface)
+            return True
+        except ValueError:
+            return False
+
+    def stop_sniffing(self):
+        self.sniffing = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        self.save_button.config(state=tk.NORMAL)
+
+    def save_packets(self):
+        if not self.packets:
+            messagebox.showinfo("No Data", "No packets to save.")
+            return
+
+        file_path = filedialog.asksaveasfilename(defaultextension=".pcap", filetypes=[("PCAP Files", "*.pcap")])
+        if not file_path:
+            return
+
+        try:
+            scapy.wrpcap(file_path, self.packets)
+            messagebox.showinfo("Success", f"Packets saved to {file_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save packets: {e}")
+
+    def sniffer(self, interface):
+        self.log(f"Listening on interface {interface}\n")
+        try:
+            scapy.sniff(iface=interface, store=False, prn=self.process_packet)
+        except Exception as e:
+            self.log(f"Error: {e}")
+
+def get_url(self, packet):
+        if packet.haslayer(http.HTTPRequest):
+            return packet[http.HTTPRequest].Host + packet[http.HTTPRequest].Path
+        return None
+
+    def get_credentials(self, packet):
+        if packet.haslayer(scapy.Raw):
+            load = str(packet[scapy.Raw].load)
+            keywords = ["username", "user", "uname", "login", "password", "pass"]
+            for keyword in keywords:
+                if keyword in load:
+                    return load
+        return None
+
+    def process_packet(self, packet):
+        if not self.sniffing:
+            return
+
+        # Convert IP addresses to strings for comparison
+        packet_ip = packet[scapy.IP].src if packet.haslayer(scapy.IP) else None
+        filter_ip = self.filter_ip if self.filter_ip else ""
+
+        # Filter packets based on IP address
+        if filter_ip and (packet_ip != filter_ip):
+            return
+
+        self.packets.append(packet)
+
+        if packet.haslayer(http.HTTPRequest):
+            url = self.get_url(packet)
+            if url:
+                self.log(f"HTTP Request >> {url}")
+
+            credentials_packet = self.get_credentials(packet)
+            if credentials_packet:
+                self.log(f"Credentials >> {credentials_packet}")
+
+def main():
+    root = tk.Tk()
+    app = PacketSnifferApp(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
